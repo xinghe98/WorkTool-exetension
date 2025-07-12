@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "WorkTool 插件",
+  "version": "1.0",
+  "description": "WorkTool 浏览器插件,作为桌面版扩展",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
