@@ -45,6 +45,7 @@ export function RequestHeaders({
   const [headers, setHeaders] = useState<RequestHeader[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newHeader, setNewHeader] = useState({ name: "", value: "" });
+  const [editingValues, setEditingValues] = useState({ name: "", value: "" });
 
   // 初始化时从存储加载配置
   useEffect(() => {
@@ -99,6 +100,7 @@ export function RequestHeaders({
   // 开始编辑
   const startEdit = useCallback((header: RequestHeader) => {
     setEditingId(header.id);
+    setEditingValues({ name: header.name, value: header.value });
   }, []);
 
   // 保存编辑
@@ -116,12 +118,14 @@ export function RequestHeaders({
       )
     );
     setEditingId(null);
+    setEditingValues({ name: "", value: "" });
     setMessage("请求头已更新");
   }, [headers, updateHeaders, setMessage]);
 
   // 取消编辑
   const cancelEdit = useCallback(() => {
     setEditingId(null);
+    setEditingValues({ name: "", value: "" });
   }, []);
 
   // 应用请求头
@@ -241,7 +245,7 @@ export function RequestHeaders({
           </div>
         </div>
 
-        <div className="space-y-3 max-h-60 overflow-y-auto">
+        <div className="space-y-3 max-h-60 overflow-y-auto overflow-x-hidden">
           {headers.map((header) => (
             <div
               key={header.id}
@@ -259,7 +263,7 @@ export function RequestHeaders({
                     onChange={() => toggleHeader(header.id)}
                     className="w-4 h-4 rounded border-white/30 bg-white/10 checked:bg-green-500 checked:border-green-500 focus:ring-green-500 focus:ring-2"
                   />
-                  <span className="font-semibold text-sm text-white">
+                  <span className="font-semibold text-sm text-white break-all overflow-hidden">
                     {header.name}
                   </span>
                 </div>
@@ -283,35 +287,34 @@ export function RequestHeaders({
                 <div className="space-y-2">
                   <input
                     type="text"
-                    defaultValue={header.name}
+                    value={editingValues.name}
+                    onChange={(e) => setEditingValues(prev => ({ ...prev, name: e.target.value }))}
+                    data-header-id={header.id}
+                    data-field="name"
                     className="w-full px-2 py-1 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 text-white"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        const target = e.target as HTMLInputElement;
-                        const nameInput = target;
-                        const valueInput = target.nextElementSibling as HTMLInputElement;
-                        saveEdit(header.id, nameInput.value, valueInput.value);
+                        saveEdit(header.id, editingValues.name, editingValues.value);
                       }
                     }}
                   />
                   <input
                     type="text"
-                    defaultValue={header.value}
+                    value={editingValues.value}
+                    onChange={(e) => setEditingValues(prev => ({ ...prev, value: e.target.value }))}
+                    data-header-id={header.id}
+                    data-field="value"
                     className="w-full px-2 py-1 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 text-white"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        const target = e.target as HTMLInputElement;
-                        const nameInput = target.previousElementSibling as HTMLInputElement;
-                        saveEdit(header.id, nameInput.value, target.value);
+                        saveEdit(header.id, editingValues.name, editingValues.value);
                       }
                     }}
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
-                        const nameInput = document.querySelector(`input[data-header-id="${header.id}"][data-field="name"]`) as HTMLInputElement;
-                        const valueInput = document.querySelector(`input[data-header-id="${header.id}"][data-field="value"]`) as HTMLInputElement;
-                        saveEdit(header.id, nameInput?.value || header.name, valueInput?.value || header.value);
+                        saveEdit(header.id, editingValues.name, editingValues.value);
                       }}
                       className="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-all duration-300"
                     >
@@ -326,7 +329,7 @@ export function RequestHeaders({
                   </div>
                 </div>
               ) : (
-                <div className="text-xs text-white/80 break-all">
+                <div className="text-xs text-white/80 break-all overflow-hidden">
                   {header.value}
                 </div>
               )}
