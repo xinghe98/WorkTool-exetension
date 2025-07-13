@@ -3,6 +3,13 @@
   "name": "WorkTool 插件",
   "version": "1.0",
   "description": "WorkTool 浏览器插件,作为桌面版扩展",
+  "permissions": ["activeTab", "scripting", "clipboardWrite"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["assets/content.js"]
+    }
+  ],
   "action": {
     "default_popup": "index.html"
   },
