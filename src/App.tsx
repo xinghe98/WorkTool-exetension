@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TableTools } from "./components/TableTools";
 import { CopyTools } from "./components/CopyTools";
+import { RequestHeaders } from "./components/RequestHeaders";
 import { useChromeAPI } from "./hooks/useChromeAPI";
 
 function App() {
@@ -45,6 +46,17 @@ function App() {
             📋 复制工具
             {activeTab === 'copy' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-0.5 bg-gradient-to-r from-red-400 to-yellow-400"></div>}
           </button>
+          <button
+            className={`flex-1 py-4 px-3 text-sm font-medium transition-all duration-300 relative overflow-hidden ${
+              activeTab === "headers"
+                ? "text-white bg-white/20"
+                : "text-white/70 hover:bg-white/10"
+            }`}
+            onClick={() => setActiveTab("headers")}
+          >
+            🌐 headers
+            {activeTab === 'headers' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-0.5 bg-gradient-to-r from-red-400 to-yellow-400"></div>}
+          </button>
         </nav>
 
         <main className="flex-1 p-5 overflow-y-auto">
@@ -59,6 +71,15 @@ function App() {
 
           {activeTab === "copy" && (
             <CopyTools
+              sendMessage={sendMessage}
+              isLoading={isLoading}
+              setIsLoading={setIsLoading}
+              setMessage={setMessage}
+            />
+          )}
+
+          {activeTab === "headers" && (
+            <RequestHeaders
               sendMessage={sendMessage}
               isLoading={isLoading}
               setIsLoading={setIsLoading}

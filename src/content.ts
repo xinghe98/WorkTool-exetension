@@ -81,10 +81,18 @@ interface TableInfo {
   preview?: string;
 }
 
+interface RequestHeader {
+  id: string;
+  name: string;
+  value: string;
+  enabled: boolean;
+}
+
 interface ChromeRequest {
   action: string;
   tableId?: number;
   selectedIds?: number[];
+  headers?: RequestHeader[];
 }
 
 interface ChromeResponse {
@@ -93,12 +101,14 @@ interface ChromeResponse {
   success?: boolean;
   error?: string;
   copyEnabled?: boolean;
+  headers?: RequestHeader[];
 }
 
 let foundTables: HTMLTableElement[] = [];
 let previouslyHighlighted: HTMLTableElement | null = null;
 let copyProtectionDisabled = false;
-let originalStyles: Map<CSSStyleRule, string> = new Map();
+const originalStyles: Map<CSSStyleRule, string> = new Map();
+let customHeaders: RequestHeader[] = [];
 
 // 清理之前的高亮
 const clearHighlight = () => {
@@ -420,6 +430,69 @@ const checkCopyStatus = (): { success: boolean; copyEnabled: boolean } => {
   };
 };
 
+// 应用自定义请求头
+const applyHeaders = async (headers: RequestHeader[]): Promise<{ success: boolean; error?: string }> => {
+  try {
+    customHeaders = headers.filter(h => h.enabled);
+    
+    // 通过background script应用请求头
+    const response = await chrome.runtime.sendMessage({
+      action: 'applyHeaders',
+      headers: customHeaders
+    });
+    
+    if (response && response.success) {
+      console.log('应用请求头成功:', customHeaders);
+      return { success: true };
+    } else {
+      return { 
+        success: false, 
+        error: response?.error || '应用请求头失败' 
+      };
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      error: formatError(error) 
+    };
+  }
+};
+
+// 清除所有自定义请求头
+const clearHeaders = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    customHeaders = [];
+    
+    // 通过background script清除请求头
+    const response = await chrome.runtime.sendMessage({
+      action: 'clearHeaders'
+    });
+    
+    if (response && response.success) {
+      console.log('清除所有请求头成功');
+      return { success: true };
+    } else {
+      return { 
+        success: false, 
+        error: response?.error || '清除请求头失败' 
+      };
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      error: formatError(error) 
+    };
+  }
+};
+
+// 获取当前请求头配置
+const getHeaders = (): { success: boolean; headers: RequestHeader[] } => {
+  return { 
+    success: true, 
+    headers: customHeaders 
+  };
+};
+
 // 消息监听器
 chrome.runtime.onMessage.addListener((
   request: ChromeRequest, 
@@ -486,6 +559,32 @@ chrome.runtime.onMessage.addListener((
 
       case "checkCopyStatus": {
         const result = checkCopyStatus();
+        sendResponse(result);
+        break;
+      }
+
+      case "applyHeaders": {
+        if (request.headers) {
+          applyHeaders(request.headers).then(result => {
+            sendResponse(result);
+          });
+          return true; // 保持消息通道开放
+        } else {
+          sendResponse({ success: false, error: "缺少请求头数据" });
+        }
+        break;
+      }
+
+      case "clearHeaders": {
+        clearHeaders().then(result => {
+          sendResponse(result);
+        });
+        return true; // 保持消息通道开放
+        break;
+      }
+
+      case "getHeaders": {
+        const result = getHeaders();
         sendResponse(result);
         break;
       }

@@ -5,6 +5,7 @@ export interface ChromeMessageResponse {
   success?: boolean;
   error?: string;
   copyEnabled?: boolean;
+  headers?: RequestHeader[];
 }
 
 export interface ChromeMessageData {
@@ -19,6 +20,14 @@ export interface TableInfo {
   preview?: string;
 }
 
+// 请求头相关类型
+export interface RequestHeader {
+  id: string;
+  name: string;
+  value: string;
+  enabled: boolean;
+}
+
 // 组件Props类型
 export interface TableToolsProps {
   sendMessage: (action: string, data?: ChromeMessageData) => Promise<ChromeMessageResponse>;
@@ -28,6 +37,13 @@ export interface TableToolsProps {
 }
 
 export interface CopyToolsProps {
+  sendMessage: (action: string, data?: ChromeMessageData) => Promise<ChromeMessageResponse>;
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
+  setMessage: (message: string) => void;
+}
+
+export interface RequestHeadersProps {
   sendMessage: (action: string, data?: ChromeMessageData) => Promise<ChromeMessageResponse>;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
