@@ -362,17 +362,17 @@ const disableCopyProtection = () => {
   document.head.appendChild(allowCopyStyle);
 
   // 移除所有禁止复制的事件监听器
-  const events = ['copy', 'cut', 'selectstart', 'select', 'contextmenu', 'mousedown', 'mouseup', 'keydown', 'keyup'];
+  const events = ['copy', 'cut', 'selectstart', 'select', 'mousedown', 'mouseup', 'keydown', 'keyup'];
   events.forEach(eventType => {
     document.addEventListener(eventType, (e) => {
       e.stopPropagation();
     }, true);
   });
 
-  // 禁用右键菜单
+  // 恢复右键菜单功能
   document.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    return false;
+    e.stopPropagation();
+    return true;
   }, true);
 
   // 允许选择文本
