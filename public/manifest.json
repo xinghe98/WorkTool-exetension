@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WorkTool 插件",
-  "version": "1.2",
+  "version": "1.2.1",
   "description": "WorkTool 浏览器插件,作为桌面版扩展",
   "permissions": [
     "activeTab",

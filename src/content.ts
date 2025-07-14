@@ -3,14 +3,41 @@ const formatError = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
   }
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return error;
   }
-  return '未知错误';
+  return "未知错误";
 };
 
-const isValidTable = (element: Element): boolean => {
-  return element.tagName === 'TABLE' && element.children.length > 0;
+const isValidTable = (table: HTMLTableElement): boolean => {
+  // 规则 1: 表格必须在页面上可见。这是排除隐藏表格的最有效方法。
+  // offsetParent === null 通常意味着元素或其祖先的 display 属性为 none。
+  if (table.offsetParent === null) {
+    return false;
+  }
+
+  // 规则 2: 表格至少要有2行（一行可能是表头，一行是数据）。
+  // 这能过滤掉大量仅用于布局的单行表格。
+  if (table.rows.length < 2) {
+    return false;
+  }
+
+  // 规则 3: 表格的第一行至少要有2个单元格（列）。
+  // 单列表格通常不是我们关心的数据表。
+  if (table.rows[0].cells.length < 2) {
+    return false;
+  }
+
+  // 规则 4: 这是一个针对 jqGrid 的特殊规则。
+  // jqGrid 的表头和数据是分离的两个 table。我们要排除那个只包含表头的 table，
+  // 它通常被一个 class 为 'ui-jqgrid-hdiv' 的 div 包裹。
+  // 我们只保留包含数据的主体表格（通常 class 为 'ui-jqgrid-btable'）。
+  if (table.closest(".ui-jqgrid-hdiv")) {
+    return false;
+  }
+
+  // 如果通过了以上所有检查，我们就认为它是一个有效的数据表格。
+  return true;
 };
 
 const getTableInfo = (table: HTMLTableElement) => {
@@ -23,11 +50,11 @@ const getTableInfo = (table: HTMLTableElement) => {
 const getTablePreview = (table: HTMLTableElement): string => {
   try {
     const cells: string[] = [];
-    
+
     // 遍历表格的前几行和前几列来获取预览内容
     const maxRows = Math.min(3, table.rows.length);
     const maxCols = Math.min(5, table.rows[0]?.cells.length || 0);
-    
+
     for (let i = 0; i < maxRows; i++) {
       const row = table.rows[i];
       if (row) {
@@ -36,22 +63,22 @@ const getTablePreview = (table: HTMLTableElement): string => {
           const cell = row.cells[j];
           if (cell) {
             // 获取单元格的文本内容，去除多余空格
-            const cellText = cell.textContent?.trim() || '';
+            const cellText = cell.textContent?.trim() || "";
             if (cellText) {
               rowCells.push(cellText);
             }
           }
         }
         if (rowCells.length > 0) {
-          cells.push(rowCells.join(' | '));
+          cells.push(rowCells.join(" | "));
         }
       }
     }
-    
-    return cells.join(' | ');
+
+    return cells.join(" | ");
   } catch (error) {
-    console.warn('提取表格预览时出错:', error);
-    return '';
+    console.warn("提取表格预览时出错:", error);
+    return "";
   }
 };
 
@@ -61,7 +88,7 @@ const supportsClipboardAPI = (): boolean => {
 
 const safeAsync = async <T>(
   operation: () => Promise<T>,
-  fallback?: (error: Error) => T
+  fallback?: (error: Error) => T,
 ): Promise<T> => {
   try {
     return await operation();
@@ -133,7 +160,7 @@ const highlightTable = (tableId: number) => {
 const findTables = (): TableInfo[] => {
   const allTables = Array.from(document.querySelectorAll("table"));
   foundTables = allTables.filter(isValidTable);
-  
+
   return foundTables.map((table, index) => {
     const { rows, cols } = getTableInfo(table);
     const preview = getTablePreview(table);
@@ -142,205 +169,231 @@ const findTables = (): TableInfo[] => {
 };
 
 // 复制单个表格到剪贴板
-const copySingleTableToClipboard = async (tableId: number): Promise<{ success: boolean; error?: string }> => {
-  return safeAsync(async () => {
-    if (tableId < 0 || tableId >= foundTables.length) {
-      return { success: false, error: "表格ID无效" };
-    }
-
-    const table = foundTables[tableId];
-    const tableInfo = `=== 表格 ${tableId + 1} ===\n`;
-    const tableText = tableInfo + table.outerHTML + "\n";
-
-    // 优先使用现代Clipboard API
-    if (supportsClipboardAPI()) {
-      try {
-        await navigator.clipboard.writeText(tableText);
-        return { success: true };
-      } catch (clipboardError) {
-        console.warn("Clipboard API failed, falling back to execCommand:", clipboardError);
+const copySingleTableToClipboard = async (
+  tableId: number,
+): Promise<{ success: boolean; error?: string }> => {
+  return safeAsync(
+    async () => {
+      if (tableId < 0 || tableId >= foundTables.length) {
+        return { success: false, error: "表格ID无效" };
       }
-    }
 
-    // 降级到execCommand方法
-    const textarea = document.createElement("textarea");
-    textarea.value = tableText;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "-9999px";
-    document.body.appendChild(textarea);
-    
-    try {
-      textarea.select();
-      const success = document.execCommand("copy");
-      return {
-        success,
-        error: success ? undefined : "execCommand复制失败"
-      };
-    } catch (error) {
-      return { 
-        success: false, 
-        error: `execCommand错误: ${formatError(error)}` 
-      };
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  }, (error) => {
-    return { success: false, error: `复制失败: ${formatError(error)}` };
-  });
+      const table = foundTables[tableId];
+      const tableInfo = `=== 表格 ${tableId + 1} ===\n`;
+      const tableText = tableInfo + table.outerHTML + "\n";
+
+      // 优先使用现代Clipboard API
+      if (supportsClipboardAPI()) {
+        try {
+          await navigator.clipboard.writeText(tableText);
+          return { success: true };
+        } catch (clipboardError) {
+          console.warn(
+            "Clipboard API failed, falling back to execCommand:",
+            clipboardError,
+          );
+        }
+      }
+
+      // 降级到execCommand方法
+      const textarea = document.createElement("textarea");
+      textarea.value = tableText;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+
+      try {
+        textarea.select();
+        const success = document.execCommand("copy");
+        return {
+          success,
+          error: success ? undefined : "execCommand复制失败",
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: `execCommand错误: ${formatError(error)}`,
+        };
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    },
+    (error) => {
+      return { success: false, error: `复制失败: ${formatError(error)}` };
+    },
+  );
 };
 
 // 复制选中的表格到剪贴板
-const copySelectedTablesToClipboard = async (selectedIds: number[]): Promise<{ success: boolean; error?: string }> => {
-  return safeAsync(async () => {
-    if (selectedIds.length === 0) {
-      return { success: false, error: "没有选择表格" };
-    }
-
-    const tablesText = selectedIds
-      .map(tableId => {
-        if (tableId < 0 || tableId >= foundTables.length) {
-          return null;
-        }
-        const table = foundTables[tableId];
-        const tableInfo = `=== 表格 ${tableId + 1} ===\n`;
-        return tableInfo + table.outerHTML + "\n";
-      })
-      .filter(Boolean)
-      .join("\n");
-
-    if (!tablesText) {
-      return { success: false, error: "没有有效的表格" };
-    }
-
-    // 优先使用现代Clipboard API
-    if (supportsClipboardAPI()) {
-      try {
-        await navigator.clipboard.writeText(tablesText);
-        return { success: true };
-      } catch (clipboardError) {
-        console.warn("Clipboard API failed, falling back to execCommand:", clipboardError);
+const copySelectedTablesToClipboard = async (
+  selectedIds: number[],
+): Promise<{ success: boolean; error?: string }> => {
+  return safeAsync(
+    async () => {
+      if (selectedIds.length === 0) {
+        return { success: false, error: "没有选择表格" };
       }
-    }
 
-    // 降级到execCommand方法
-    const textarea = document.createElement("textarea");
-    textarea.value = tablesText;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "-9999px";
-    document.body.appendChild(textarea);
-    
-    try {
-      textarea.select();
-      const success = document.execCommand("copy");
-      return {
-        success,
-        error: success ? undefined : "execCommand复制失败"
-      };
-    } catch (error) {
-      return { 
-        success: false, 
-        error: `execCommand错误: ${formatError(error)}` 
-      };
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  }, (error) => {
-    return { success: false, error: `复制失败: ${formatError(error)}` };
-  });
+      const tablesText = selectedIds
+        .map((tableId) => {
+          if (tableId < 0 || tableId >= foundTables.length) {
+            return null;
+          }
+          const table = foundTables[tableId];
+          const tableInfo = `=== 表格 ${tableId + 1} ===\n`;
+          return tableInfo + table.outerHTML + "\n";
+        })
+        .filter(Boolean)
+        .join("\n");
+
+      if (!tablesText) {
+        return { success: false, error: "没有有效的表格" };
+      }
+
+      // 优先使用现代Clipboard API
+      if (supportsClipboardAPI()) {
+        try {
+          await navigator.clipboard.writeText(tablesText);
+          return { success: true };
+        } catch (clipboardError) {
+          console.warn(
+            "Clipboard API failed, falling back to execCommand:",
+            clipboardError,
+          );
+        }
+      }
+
+      // 降级到execCommand方法
+      const textarea = document.createElement("textarea");
+      textarea.value = tablesText;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+
+      try {
+        textarea.select();
+        const success = document.execCommand("copy");
+        return {
+          success,
+          error: success ? undefined : "execCommand复制失败",
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: `execCommand错误: ${formatError(error)}`,
+        };
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    },
+    (error) => {
+      return { success: false, error: `复制失败: ${formatError(error)}` };
+    },
+  );
 };
 
 // 复制所有表格到剪贴板
-const copyTablesToClipboard = async (): Promise<{ success: boolean; error?: string }> => {
-  return safeAsync(async () => {
-    if (foundTables.length === 0) {
-      return { success: false, error: "没有找到表格" };
-    }
-
-    const tablesText = foundTables
-      .map((table, index) => {
-        const tableInfo = `=== 表格 ${index + 1} ===\n`;
-        return tableInfo + table.outerHTML + "\n";
-      })
-      .join("\n");
-
-    // 优先使用现代Clipboard API
-    if (supportsClipboardAPI()) {
-      try {
-        await navigator.clipboard.writeText(tablesText);
-        return { success: true };
-      } catch (clipboardError) {
-        console.warn("Clipboard API failed, falling back to execCommand:", clipboardError);
+const copyTablesToClipboard = async (): Promise<{
+  success: boolean;
+  error?: string;
+}> => {
+  return safeAsync(
+    async () => {
+      if (foundTables.length === 0) {
+        return { success: false, error: "没有找到表格" };
       }
-    }
 
-    // 降级到execCommand方法
-    const textarea = document.createElement("textarea");
-    textarea.value = tablesText;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "-9999px";
-    document.body.appendChild(textarea);
-    
-    try {
-      textarea.select();
-      const success = document.execCommand("copy");
-      return {
-        success,
-        error: success ? undefined : "execCommand复制失败"
-      };
-    } catch (error) {
-      return { 
-        success: false, 
-        error: `execCommand错误: ${formatError(error)}` 
-      };
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  }, (error) => {
-    return { success: false, error: `复制失败: ${formatError(error)}` };
-  });
+      const tablesText = foundTables
+        .map((table, index) => {
+          const tableInfo = `=== 表格 ${index + 1} ===\n`;
+          return tableInfo + table.outerHTML + "\n";
+        })
+        .join("\n");
+
+      // 优先使用现代Clipboard API
+      if (supportsClipboardAPI()) {
+        try {
+          await navigator.clipboard.writeText(tablesText);
+          return { success: true };
+        } catch (clipboardError) {
+          console.warn(
+            "Clipboard API failed, falling back to execCommand:",
+            clipboardError,
+          );
+        }
+      }
+
+      // 降级到execCommand方法
+      const textarea = document.createElement("textarea");
+      textarea.value = tablesText;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+
+      try {
+        textarea.select();
+        const success = document.execCommand("copy");
+        return {
+          success,
+          error: success ? undefined : "execCommand复制失败",
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: `execCommand错误: ${formatError(error)}`,
+        };
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    },
+    (error) => {
+      return { success: false, error: `复制失败: ${formatError(error)}` };
+    },
+  );
 };
 
 // 禁用复制保护
 const disableCopyProtection = () => {
   // 移除所有禁止复制和选择的CSS样式
   const styleSheets = Array.from(document.styleSheets);
-  styleSheets.forEach(sheet => {
+  styleSheets.forEach((sheet) => {
     try {
       const rules = Array.from(sheet.cssRules || sheet.rules);
-      rules.forEach(rule => {
+      rules.forEach((rule) => {
         if (rule instanceof CSSStyleRule) {
           const selector = rule.selectorText;
-          if (selector && (
-            selector.includes('user-select') || 
-            selector.includes('-webkit-user-select') ||
-            selector.includes('-moz-user-select') ||
-            selector.includes('-ms-user-select') ||
-            selector.includes('pointer-events') ||
-            selector.includes('::selection') ||
-            selector.includes('::-moz-selection')
-          )) {
+          if (
+            selector &&
+            (selector.includes("user-select") ||
+              selector.includes("-webkit-user-select") ||
+              selector.includes("-moz-user-select") ||
+              selector.includes("-ms-user-select") ||
+              selector.includes("pointer-events") ||
+              selector.includes("::selection") ||
+              selector.includes("::-moz-selection"))
+          ) {
             // 保存原始样式
             originalStyles.set(rule, rule.cssText);
             // 移除禁止复制的样式
-            rule.style.removeProperty('user-select');
-            rule.style.removeProperty('-webkit-user-select');
-            rule.style.removeProperty('-moz-user-select');
-            rule.style.removeProperty('-ms-user-select');
-            rule.style.removeProperty('pointer-events');
+            rule.style.removeProperty("user-select");
+            rule.style.removeProperty("-webkit-user-select");
+            rule.style.removeProperty("-moz-user-select");
+            rule.style.removeProperty("-ms-user-select");
+            rule.style.removeProperty("pointer-events");
           }
         }
       });
     } catch (e) {
       // 跨域样式表可能无法访问
-      console.warn('无法访问样式表:', e);
+      console.warn("无法访问样式表:", e);
     }
   });
 
   // 添加允许复制的全局样式
-  const allowCopyStyle = document.createElement('style');
+  const allowCopyStyle = document.createElement("style");
   allowCopyStyle.textContent = `
     * {
       -webkit-user-select: auto !important;
@@ -362,24 +415,45 @@ const disableCopyProtection = () => {
   document.head.appendChild(allowCopyStyle);
 
   // 移除所有禁止复制的事件监听器
-  const events = ['copy', 'cut', 'selectstart', 'select', 'mousedown', 'mouseup', 'keydown', 'keyup'];
-  events.forEach(eventType => {
-    document.addEventListener(eventType, (e) => {
-      e.stopPropagation();
-    }, true);
+  const events = [
+    "copy",
+    "cut",
+    "selectstart",
+    "select",
+    "mousedown",
+    "mouseup",
+    "keydown",
+    "keyup",
+  ];
+  events.forEach((eventType) => {
+    document.addEventListener(
+      eventType,
+      (e) => {
+        e.stopPropagation();
+      },
+      true,
+    );
   });
 
   // 恢复右键菜单功能
-  document.addEventListener('contextmenu', (e) => {
-    e.stopPropagation();
-    return true;
-  }, true);
+  document.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.stopPropagation();
+      return true;
+    },
+    true,
+  );
 
   // 允许选择文本
-  document.addEventListener('selectstart', (e) => {
-    e.stopPropagation();
-    return true;
-  }, true);
+  document.addEventListener(
+    "selectstart",
+    (e) => {
+      e.stopPropagation();
+      return true;
+    },
+    true,
+  );
 
   copyProtectionDisabled = true;
   return { success: true, copyEnabled: true };
@@ -394,9 +468,9 @@ const enableCopyProtection = () => {
   originalStyles.clear();
 
   // 移除允许复制的样式
-  const allowCopyStyles = document.querySelectorAll('style');
-  allowCopyStyles.forEach(style => {
-    if (style.textContent && style.textContent.includes('user-select: auto')) {
+  const allowCopyStyles = document.querySelectorAll("style");
+  allowCopyStyles.forEach((style) => {
+    if (style.textContent && style.textContent.includes("user-select: auto")) {
       style.remove();
     }
   });
@@ -406,7 +480,11 @@ const enableCopyProtection = () => {
 };
 
 // 切换复制保护状态
-const toggleCopyProtection = (): { success: boolean; copyEnabled: boolean; error?: string } => {
+const toggleCopyProtection = (): {
+  success: boolean;
+  copyEnabled: boolean;
+  error?: string;
+} => {
   try {
     if (copyProtectionDisabled) {
       return enableCopyProtection();
@@ -414,191 +492,200 @@ const toggleCopyProtection = (): { success: boolean; copyEnabled: boolean; error
       return disableCopyProtection();
     }
   } catch (error) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       copyEnabled: copyProtectionDisabled,
-      error: formatError(error)
+      error: formatError(error),
     };
   }
 };
 
 // 检查复制状态
 const checkCopyStatus = (): { success: boolean; copyEnabled: boolean } => {
-  return { 
-    success: true, 
-    copyEnabled: copyProtectionDisabled 
+  return {
+    success: true,
+    copyEnabled: copyProtectionDisabled,
   };
 };
 
 // 应用自定义请求头
-const applyHeaders = async (headers: RequestHeader[]): Promise<{ success: boolean; error?: string }> => {
+const applyHeaders = async (
+  headers: RequestHeader[],
+): Promise<{ success: boolean; error?: string }> => {
   try {
-    customHeaders = headers.filter(h => h.enabled);
-    
+    customHeaders = headers.filter((h) => h.enabled);
+
     // 通过background script应用请求头
     const response = await chrome.runtime.sendMessage({
-      action: 'applyHeaders',
-      headers: customHeaders
+      action: "applyHeaders",
+      headers: customHeaders,
     });
-    
+
     if (response && response.success) {
-      console.log('应用请求头成功:', customHeaders);
+      console.log("应用请求头成功:", customHeaders);
       return { success: true };
     } else {
-      return { 
-        success: false, 
-        error: response?.error || '应用请求头失败' 
+      return {
+        success: false,
+        error: response?.error || "应用请求头失败",
       };
     }
   } catch (error) {
-    return { 
-      success: false, 
-      error: formatError(error) 
+    return {
+      success: false,
+      error: formatError(error),
     };
   }
 };
 
 // 清除所有自定义请求头
-const clearHeaders = async (): Promise<{ success: boolean; error?: string }> => {
+const clearHeaders = async (): Promise<{
+  success: boolean;
+  error?: string;
+}> => {
   try {
     customHeaders = [];
-    
+
     // 通过background script清除请求头
     const response = await chrome.runtime.sendMessage({
-      action: 'clearHeaders'
+      action: "clearHeaders",
     });
-    
+
     if (response && response.success) {
-      console.log('清除所有请求头成功');
+      console.log("清除所有请求头成功");
       return { success: true };
     } else {
-      return { 
-        success: false, 
-        error: response?.error || '清除请求头失败' 
+      return {
+        success: false,
+        error: response?.error || "清除请求头失败",
       };
     }
   } catch (error) {
-    return { 
-      success: false, 
-      error: formatError(error) 
+    return {
+      success: false,
+      error: formatError(error),
     };
   }
 };
 
 // 获取当前请求头配置
 const getHeaders = (): { success: boolean; headers: RequestHeader[] } => {
-  return { 
-    success: true, 
-    headers: customHeaders 
+  return {
+    success: true,
+    headers: customHeaders,
   };
 };
 
 // 消息监听器
-chrome.runtime.onMessage.addListener((
-  request: ChromeRequest, 
-  _sender, 
-  sendResponse: (response: ChromeResponse) => void
-) => {
-  try {
-    switch (request.action) {
-      case "ping": {
-        sendResponse({ status: "ready" });
-        break;
-      }
-
-      case "findTables": {
-        const tables = findTables();
-        sendResponse({ tables });
-        break;
-      }
-
-      case "highlightTable": {
-        if (request.tableId !== undefined) {
-          highlightTable(request.tableId);
+chrome.runtime.onMessage.addListener(
+  (
+    request: ChromeRequest,
+    _sender,
+    sendResponse: (response: ChromeResponse) => void,
+  ) => {
+    try {
+      switch (request.action) {
+        case "ping": {
+          sendResponse({ status: "ready" });
+          break;
         }
-        sendResponse({ success: true });
-        break;
-      }
 
-      case "copyTables": {
-        copyTablesToClipboard().then(result => {
+        case "findTables": {
+          const tables = findTables();
+          sendResponse({ tables });
+          break;
+        }
+
+        case "highlightTable": {
+          if (request.tableId !== undefined) {
+            highlightTable(request.tableId);
+          }
+          sendResponse({ success: true });
+          break;
+        }
+
+        case "copyTables": {
+          copyTablesToClipboard().then((result) => {
+            sendResponse(result);
+          });
+          return true; // 保持消息通道开放
+        }
+
+        case "copySingleTable": {
+          if (request.tableId !== undefined) {
+            copySingleTableToClipboard(request.tableId).then((result) => {
+              sendResponse(result);
+            });
+            return true; // 保持消息通道开放
+          } else {
+            sendResponse({ success: false, error: "缺少表格ID" });
+          }
+          break;
+        }
+
+        case "copySelectedTables": {
+          if (request.selectedIds) {
+            copySelectedTablesToClipboard(request.selectedIds).then(
+              (result) => {
+                sendResponse(result);
+              },
+            );
+            return true; // 保持消息通道开放
+          } else {
+            sendResponse({ success: false, error: "缺少选中的表格ID" });
+          }
+          break;
+        }
+
+        case "toggleCopyProtection": {
+          const result = toggleCopyProtection();
           sendResponse(result);
-        });
-        return true; // 保持消息通道开放
-      }
-
-      case "copySingleTable": {
-        if (request.tableId !== undefined) {
-          copySingleTableToClipboard(request.tableId).then(result => {
-            sendResponse(result);
-          });
-          return true; // 保持消息通道开放
-        } else {
-          sendResponse({ success: false, error: "缺少表格ID" });
+          break;
         }
-        break;
-      }
 
-      case "copySelectedTables": {
-        if (request.selectedIds) {
-          copySelectedTablesToClipboard(request.selectedIds).then(result => {
-            sendResponse(result);
-          });
-          return true; // 保持消息通道开放
-        } else {
-          sendResponse({ success: false, error: "缺少选中的表格ID" });
-        }
-        break;
-      }
-
-      case "toggleCopyProtection": {
-        const result = toggleCopyProtection();
-        sendResponse(result);
-        break;
-      }
-
-      case "checkCopyStatus": {
-        const result = checkCopyStatus();
-        sendResponse(result);
-        break;
-      }
-
-      case "applyHeaders": {
-        if (request.headers) {
-          applyHeaders(request.headers).then(result => {
-            sendResponse(result);
-          });
-          return true; // 保持消息通道开放
-        } else {
-          sendResponse({ success: false, error: "缺少请求头数据" });
-        }
-        break;
-      }
-
-      case "clearHeaders": {
-        clearHeaders().then(result => {
+        case "checkCopyStatus": {
+          const result = checkCopyStatus();
           sendResponse(result);
-        });
-        return true; // 保持消息通道开放
-        break;
-      }
+          break;
+        }
 
-      case "getHeaders": {
-        const result = getHeaders();
-        sendResponse(result);
-        break;
-      }
+        case "applyHeaders": {
+          if (request.headers) {
+            applyHeaders(request.headers).then((result) => {
+              sendResponse(result);
+            });
+            return true; // 保持消息通道开放
+          } else {
+            sendResponse({ success: false, error: "缺少请求头数据" });
+          }
+          break;
+        }
 
-      default: {
-        sendResponse({ success: false, error: "未知操作" });
+        case "clearHeaders": {
+          clearHeaders().then((result) => {
+            sendResponse(result);
+          });
+          return true; // 保持消息通道开放
+          break;
+        }
+
+        case "getHeaders": {
+          const result = getHeaders();
+          sendResponse(result);
+          break;
+        }
+
+        default: {
+          sendResponse({ success: false, error: "未知操作" });
+        }
       }
+    } catch (error) {
+      sendResponse({ success: false, error: formatError(error) });
     }
-  } catch (error) {
-    sendResponse({ success: false, error: formatError(error) });
-  }
 
-  return true;
-});
+    return true;
+  },
+);
 
 // 页面卸载时清理高亮
 window.addEventListener("beforeunload", clearHighlight);
