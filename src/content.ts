@@ -9,6 +9,26 @@ const formatError = (error: unknown): string => {
   return "未知错误";
 };
 
+// 在 content.js 中
+const observer = new MutationObserver((mutationsList) => {
+  for (const mutation of mutationsList) {
+    if (mutation.type === "childList") {
+      const tablesInfo = findTables();
+      chrome.runtime.sendMessage({
+        action: "updateTables",
+        tables: tablesInfo,
+      });
+    }
+  }
+});
+
+// 页面加载后开始监听
+window.addEventListener("load", () => {
+  observer.observe(document.body, { childList: true, subtree: true });
+  const initialTables = findTables();
+  chrome.runtime.sendMessage({ action: "updateTables", tables: initialTables });
+});
+
 const isValidTable = (table: HTMLTableElement): boolean => {
   // 规则 1: 表格必须在页面上可见。这是排除隐藏表格的最有效方法。
   // offsetParent === null 通常意味着元素或其祖先的 display 属性为 none。
