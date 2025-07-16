@@ -3,21 +3,42 @@
 
 // 存储自定义请求头
 let customHeaders = [];
+let isReady = false;
 
 // 监听来自content script的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Background received message:', request);
   
+  // 确保background script已准备就绪
+  if (!isReady && request.action !== 'ping') {
+    sendResponse({ success: false, error: 'Background script not ready' });
+    return true;
+  }
+  
   switch (request.action) {
+    case 'ping':
+      sendResponse({ success: true, status: 'ready' });
+      break;
+      
+    case 'updateTables':
+      // 处理表格更新消息
+      console.log('Tables updated:', request.tables);
+      sendResponse({ success: true });
+      break;
+      
     case 'applyHeaders':
       if (request.headers) {
         customHeaders = request.headers;
         console.log('Applied headers:', customHeaders);
         
         // 更新网络请求规则
-        updateNetworkRules();
+        updateNetworkRules().then(() => {
+          sendResponse({ success: true });
+        }).catch((error) => {
+          sendResponse({ success: false, error: error.message });
+        });
         
-        sendResponse({ success: true });
+        return true; // 异步响应
       } else {
         sendResponse({ success: false, error: '缺少请求头数据' });
       }
@@ -28,10 +49,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.log('Cleared headers');
       
       // 清除网络请求规则
-      clearNetworkRules();
+      clearNetworkRules().then(() => {
+        sendResponse({ success: true });
+      }).catch((error) => {
+        sendResponse({ success: false, error: error.message });
+      });
       
-      sendResponse({ success: true });
-      break;
+      return true; // 异步响应
       
     case 'getHeaders':
       sendResponse({ success: true, headers: customHeaders });
@@ -83,6 +107,7 @@ async function updateNetworkRules() {
     console.log('Network rules updated:', rules);
   } catch (error) {
     console.error('Failed to update network rules:', error);
+    throw error;
   }
 }
 
@@ -101,15 +126,27 @@ async function clearNetworkRules() {
     }
   } catch (error) {
     console.error('Failed to clear network rules:', error);
+    throw error;
   }
 }
 
 // 扩展安装时的初始化
 chrome.runtime.onInstalled.addListener(() => {
   console.log('WorkTool Pro background script installed');
+  isReady = true;
 });
 
 // 扩展启动时的初始化
 chrome.runtime.onStartup.addListener(() => {
   console.log('WorkTool Pro background script started');
-}); 
+  isReady = true;
+});
+
+// Service Worker激活时
+self.addEventListener('activate', () => {
+  console.log('Service Worker activated');
+  isReady = true;
+});
+
+// 立即设置为就绪状态
+isReady = true;
